@@ -2,6 +2,7 @@ import "server-only";
 import { createClient } from "@supabase/supabase-js";
 import { LEVELS, WORLD, type Placement } from "@/lib/game/levels";
 import type { RunResult } from "@/lib/game/physics";
+import { weeklyChallenge, type WeeklyBoard } from "@/lib/game/progression";
 export type Student = {
   student_id: string;
   fullname: string;
@@ -289,6 +290,15 @@ export async function saveAttempt(
       ),
   ];
   if (r.won) {
+    const challenge = weeklyChallenge();
+    if (level === challenge.level)
+      queries.push(
+        db
+          .prepare(
+            "INSERT INTO weekly_records (week,student_id,level_id,cost,parts,time) SELECT ?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM level_attempts WHERE id=? AND student_id=? AND created_at=?) ON CONFLICT(week,student_id) DO UPDATE SET cost=MIN(weekly_records.cost,excluded.cost),parts=MIN(weekly_records.parts,excluded.parts),time=MIN(weekly_records.time,excluded.time)",
+          )
+          .bind(challenge.week, id, level, r.cost, r.parts, r.time, attemptId, id, now),
+      );
     queries.push(
       db
         .prepare(
@@ -322,6 +332,96 @@ export async function saveAttempt(
     );
   }
   await db.batch(queries);
+}
+export async function getWeekly(id: string): Promise<WeeklyBoard> {
+  const challenge = weeklyChallenge();
+  type Row = {
+    student_id: string;
+    fullname: string;
+    class_name: string;
+    cost: number;
+    parts: number;
+    time: number;
+  };
+  let rows: Row[];
+  if (isDemo()) {
+    rows = (
+      await (
+        await demoDB()
+      )
+        .prepare(
+          "SELECT w.student_id,s.fullname,c.name class_name,w.cost,w.parts,w.time FROM weekly_records w JOIN students s ON s.student_id=w.student_id JOIN classes c ON c.id=s.class_id WHERE w.week=? AND s.active=1",
+        )
+        .bind(challenge.week)
+        .all<Row>()
+    ).results;
+  } else {
+    // Roster is bounded by the importer (5,000). Page beyond Supabase's default 1,000 limit.
+    rows = [];
+    for (let offset = 0; offset < 5000; offset += 1000) {
+      const page =
+        checked(
+          await supabase()
+            .from("weekly_records")
+            .select(
+              "student_id,cost,parts,time,students!inner(fullname,active,classes(name))",
+            )
+            .eq("week", challenge.week)
+            .eq("students.active", true)
+            .order("student_id")
+            .range(offset, offset + 999),
+        ) || [];
+      rows.push(
+        ...page.map((r) => {
+          const s = r.students as unknown as {
+            fullname: string;
+            classes: { name: string };
+          };
+          return {
+            student_id: r.student_id,
+            fullname: s.fullname,
+            class_name: s.classes.name,
+            cost: r.cost,
+            parts: r.parts,
+            time: r.time,
+          };
+        }),
+      );
+      if (page.length < 1000) break;
+    }
+  }
+  const ranking = (metric: "cost" | "parts" | "time") =>
+    [...rows]
+      .sort(
+        (a, b) =>
+          a[metric] - b[metric] || a.student_id.localeCompare(b.student_id),
+      )
+      .slice(0, 20)
+      .map((r) => ({
+        fullname: r.fullname,
+        class_name: r.class_name,
+        value: r[metric],
+        is_you: r.student_id === id,
+      }));
+  const classes = new Map<string, number>();
+  for (const r of rows)
+    classes.set(r.class_name, (classes.get(r.class_name) || 0) + 1);
+  return {
+    challenge,
+    cost: ranking("cost"),
+    parts: ranking("parts"),
+    time: ranking("time"),
+    classes: [...classes]
+      .map(([class_name, contributors]) => ({
+        class_name,
+        contributors,
+        points: contributors * 10,
+      }))
+      .sort(
+        (a, b) =>
+          b.points - a.points || a.class_name.localeCompare(b.class_name),
+      ),
+  };
 }
 export async function getLeaderboard(
   id: string,

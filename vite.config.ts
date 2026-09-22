@@ -8,7 +8,17 @@ const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === "seatbelt";
 const localBindingConfig = {
   main: "vinext/server/fetch-handler",
   compatibility_flags: ["nodejs_compat"],
-  d1_databases: [],
+  // Explicit local/private demo opt-in; the school production build remains Supabase-only.
+  d1_databases:
+    process.env.INVENTRA_DEMO_PREVIEW === "true"
+      ? [
+          {
+            binding: "DB",
+            database_name: "site-creator-d1",
+            database_id: "00000000-0000-4000-8000-000000000000",
+          },
+        ]
+      : [],
   r2_buckets: [],
 };
 

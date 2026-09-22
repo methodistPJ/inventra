@@ -16,11 +16,6 @@ async function place(page: Page, p: Placement) {
   await page
     .getByRole("button", { name: `Add ${PARTS[p.kind].label}`, exact: true })
     .click();
-  const b = await page.getByTestId("game-board").boundingBox();
-  await page.mouse.click(
-    b!.x + (b!.width * 850) / 960,
-    b!.y + (b!.height * 180) / 540,
-  );
   await page
     .getByRole("spinbutton", { name: "Part X position" })
     .fill(String(p.x));
@@ -36,9 +31,10 @@ async function place(page: Page, p: Placement) {
       })
       .click();
 }
-test("complete all three challenges, retry saving, reload and restore personal best", async ({
+test("complete all ten challenges, retry saving, reload and restore personal best", async ({
   page,
 }) => {
+  test.setTimeout(180000);
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await login(page);
@@ -78,7 +74,7 @@ test("complete all three challenges, retry saving, reload and restore personal b
     }
     await expect(
       page.getByRole("heading", {
-        name: l.id === 3 ? "Motion Lab complete!" : "You made it!",
+        name: l.id === LEVELS.length ? "Motion Lab complete!" : "You made it!",
       }),
     ).toBeVisible();
     if (l.id === 1) {
@@ -91,14 +87,14 @@ test("complete all three challenges, retry saving, reload and restore personal b
     await expect(page.getByText(/saved!/).first()).toBeVisible();
     await page
       .getByRole("button", {
-        name: l.id < 3 ? "Next challenge" : "Back to the lab",
+        name: l.id < LEVELS.length ? "Next challenge" : "Back to the lab",
         exact: true,
       })
       .click();
   }
   await page.reload();
   await expect(page.getByRole("button", { name: "Build again" })).toHaveCount(
-    3,
+    10,
   );
   await page.getByRole("button", { name: "Best builds", exact: true }).click();
   await expect(page.locator(".rankings")).toContainText("ADA INVENTOR");
@@ -125,11 +121,7 @@ test("mobile name search, touch placement, deletion and reset", async ({
     .first()
     .click();
   await page.getByRole("button", { name: "Add Ramp", exact: true }).tap();
-  const box = await page.getByTestId("game-board").boundingBox();
-  await page.touchscreen.tap(
-    box!.x + box!.width * 0.45,
-    box!.y + box!.height * 0.55,
-  );
+  await expect(page.locator(".budget strong")).toContainText("RM25");
   await expect(
     page.getByRole("spinbutton", { name: "Part X position" }),
   ).toBeVisible();
@@ -139,10 +131,7 @@ test("mobile name search, touch placement, deletion and reset", async ({
     .tap();
   await expect(page.locator(".budget strong")).toContainText("RM0");
   await page.getByRole("button", { name: "Add Beam", exact: true }).tap();
-  await page.touchscreen.tap(
-    box!.x + box!.width * 0.55,
-    box!.y + box!.height * 0.6,
-  );
+  await expect(page.locator(".budget strong")).toContainText("RM20");
   await page.getByRole("button", { name: "Reset all parts" }).tap();
   await expect(page.locator(".budget strong")).toContainText("RM0");
   await page.screenshot({ path: "work/editor-mobile.png", fullPage: true });

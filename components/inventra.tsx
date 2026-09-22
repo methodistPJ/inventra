@@ -50,6 +50,7 @@ import {
   type Level,
 } from "@/lib/game/levels";
 import { validateBuild, type RunResult } from "@/lib/game/physics";
+import { makerProfile, type WeeklyBoard } from "@/lib/game/progression";
 import type { Student, Progress, Ranking } from "@/lib/server/store";
 type ApiResponse = {
   error?: string;
@@ -59,6 +60,7 @@ type ApiResponse = {
   demo: boolean;
   result: RunResult;
   records: Ranking[];
+  weekly: WeeklyBoard;
 };
 async function api(path: string, options?: RequestInit): Promise<ApiResponse> {
   const r = await fetch(path, {
@@ -84,6 +86,14 @@ function Stars({ count = 0 }: { count?: number }) {
   );
 }
 function PartIcon({ kind }: { kind: PartKind }) {
+  if (kind === "wheel")
+    return (
+      <svg viewBox="0 0 100 56" aria-hidden="true" className="part-icon">
+        <circle cx="50" cy="28" r="23" fill={PARTS[kind].color} />
+        <path d="M27 28h46M50 5v46" stroke="#315b70" strokeWidth="4" />
+        <circle cx="50" cy="28" r="6" fill="#315b70" />
+      </svg>
+    );
   return (
     <svg viewBox="0 0 100 56" aria-hidden="true" className="part-icon">
       {kind === "spring" ? (
@@ -127,6 +137,76 @@ function PartIcon({ kind }: { kind: PartKind }) {
   );
 }
 function LevelDiagram({ level }: { level: Level }) {
+  if (level.id > 3)
+    return (
+      <svg
+        viewBox="0 0 960 540"
+        className="level-diagram"
+        role="img"
+        aria-label={level.verb}
+      >
+        {level.platforms.map((p, i) => (
+          <rect
+            key={i}
+            x={p.x - p.width / 2}
+            y={p.y - p.height / 2}
+            width={p.width}
+            height={p.height}
+            fill="#7797b1"
+            transform={`rotate(${p.angle || 0} ${p.x} ${p.y})`}
+          />
+        ))}
+        {level.solution.map((p) => (
+          <rect
+            key={p.id}
+            x={p.x - PARTS[p.kind].width / 2}
+            y={p.y - 9}
+            width={PARTS[p.kind].width}
+            height="18"
+            rx="7"
+            fill={PARTS[p.kind].color}
+            opacity=".8"
+            transform={`rotate(${p.angle} ${p.x} ${p.y})`}
+          />
+        ))}
+        {[level.goal, ...(level.second ? [level.second.goal] : [])].map(
+          (g, i) => (
+            <path
+              key={i}
+              d={`M${g.x - g.width / 2} ${g.y}v45h${g.width}v-45`}
+              stroke={i ? "#5daee6" : "#b2ed7c"}
+              fill="none"
+              strokeWidth="14"
+            />
+          ),
+        )}
+        {level.cargo === "box" ? (
+          <rect
+            x={level.spawn.x - 22}
+            y={level.spawn.y - 22}
+            width="44"
+            height="44"
+            fill="#f08b50"
+          />
+        ) : (
+          <ellipse
+            cx={level.spawn.x}
+            cy={level.spawn.y}
+            rx="22"
+            ry={level.cargo === "egg" ? 30 : 22}
+            fill={level.cargo === "egg" ? "#fff5d6" : "#f08b50"}
+          />
+        )}
+        {level.second && (
+          <circle
+            cx={level.second.spawn.x}
+            cy={level.second.spawn.y}
+            r="22"
+            fill="#5daee6"
+          />
+        )}
+      </svg>
+    );
   return (
     <svg
       viewBox="0 0 320 160"
@@ -240,6 +320,7 @@ export default function Inventra() {
     [rankLoading, setRankLoading] = useState(false),
     [rankError, setRankError] = useState("");
   const board = useRef<BoardHandle>(null),
+    draggedPalette = useRef(false),
     attempt = useRef(""),
     snapshot = useRef<Placement[]>([]),
     audio = useRef<AudioContext | null>(null),
@@ -248,6 +329,29 @@ export default function Inventra() {
     selectedPart = parts.find((p) => p.id === selected),
     best = progress.find((p) => p.level_id === levelId),
     stars = progress.reduce((a, p) => a + p.stars, 0);
+  const maker = makerProfile(progress);
+  const [weekly, setWeekly] = useState<WeeklyBoard | null>(null);
+  const [weeklyError, setWeeklyError] = useState("");
+  useEffect(() => {
+    if (!student || screen !== "hub") return;
+    let active = true;
+    api("/api/weekly")
+      .then((d) => {
+        if (active) {
+          setWeekly(d.weekly);
+          setWeeklyError("");
+        }
+      })
+      .catch(() => {
+        if (active)
+          setWeeklyError(
+            "Weekly board unavailable. Your challenges still work.",
+          );
+      });
+    return () => {
+      active = false;
+    };
+  }, [student, screen]);
   const initialise = useCallback(() => {
     api("/api/session")
       .then((d) => {
@@ -350,6 +454,10 @@ export default function Inventra() {
   }
   function addPart(kind: PartKind, x = 460, y = 300) {
     if (mode !== "build") return;
+    if (parts.length >= 8) {
+      setError("Eight parts maximum. Try removing one.");
+      return;
+    }
     const count = parts.filter((p) => p.kind === kind).length;
     if (count >= (level.inventory[kind] || 0)) {
       setError(`All ${PARTS[kind].label.toLowerCase()}s are on the board.`);
@@ -370,6 +478,31 @@ export default function Inventra() {
     setSelected(p.id);
     setTool(null);
     setError("");
+  }
+  function stagePart(kind: PartKind) {
+    // Pick a visible, legal, unoccupied staging position. No second board tap.
+    for (const y of [210, 270, 330, 390])
+      for (const x of [460, 660, 260]) {
+        if (
+          parts.some((p) => Math.abs(p.x - x) < 100 && Math.abs(p.y - y) < 45)
+        )
+          continue;
+        try {
+          validateBuild(level, [
+            ...parts,
+            {
+              id: "staging-check",
+              kind,
+              x,
+              y,
+              angle: kind === "spring" ? 45 : 15,
+            },
+          ]);
+          addPart(kind, x, y);
+          return;
+        } catch {}
+      }
+    setError("Make a little room, or remove a part.");
   }
   function changeSelected(change: Partial<Placement>) {
     if (mode !== "build") return;
@@ -474,14 +607,17 @@ export default function Inventra() {
   }
   function paletteDown(e: React.PointerEvent, kind: PartKind) {
     if (mode !== "build") return;
+    draggedPalette.current = false;
     const start = { x: e.clientX, y: e.clientY };
     const cleanup = () => {
       window.removeEventListener("pointerup", up);
       window.removeEventListener("pointercancel", cleanup);
     };
     const up = (event: PointerEvent) => {
-      if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > 12)
+      if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > 12) {
+        draggedPalette.current = true;
         board.current?.drop(kind, event.clientX, event.clientY);
+      }
       cleanup();
     };
     window.addEventListener("pointerup", up, { once: true });
@@ -682,7 +818,7 @@ export default function Inventra() {
           <div className="season-board">
             <div className="board-title">
               <span>YOUR FIRST ADVENTURE</span>
-              <span>3 CHALLENGES</span>
+              <span>10 CHALLENGES</span>
             </div>
             <h2>
               Motion Lab<span>Make something move.</span>
@@ -708,17 +844,96 @@ export default function Inventra() {
               <h1>
                 Motion Lab<span className="title-dot">.</span>
               </h1>
-              <p>Three little challenges. Endless possibilities.</p>
+              <p>Ten challenges. More than one way to win.</p>
             </div>
             <div className="maker-stat">
               <Star fill="currentColor" />
               <b>
                 {stars}
-                <span>/ 9</span>
+                <span>/ 30</span>
               </b>
               <small>STARS COLLECTED</small>
             </div>
           </div>
+          <div className="maker-strip" aria-label="Maker progress">
+            <strong>Maker Level {maker.level}</strong>
+            <span>{maker.xp} XP</span>
+            <span>{maker.coins} Coins</span>
+            {maker.badges.map((b) => (
+              <span className="maker-badge" key={b}>
+                <Trophy size={16} />
+                {b}
+              </span>
+            ))}
+          </div>
+          <section className="weekly-panel" aria-label="Weekly challenge">
+            <h2>
+              <Trophy size={22} /> This week
+            </h2>
+            {weekly ? (
+              <>
+                <p>
+                  {LEVELS[weekly.challenge.level - 1].name} · Ends{" "}
+                  {new Date(weekly.challenge.ends).toLocaleDateString("en-MY", {
+                    timeZone: "Asia/Kuala_Lumpur",
+                  })}
+                </p>
+                <div className="weekly-columns">
+                  {(["cost", "parts", "time"] as const).map((category) => (
+                    <div key={category}>
+                      <h3>
+                        {
+                          {
+                            cost: "Lowest Cost",
+                            parts: "Fewest Parts",
+                            time: "Fastest Time",
+                          }[category]
+                        }
+                      </h3>
+                      <ol>
+                        {weekly[category].slice(0, 3).map((r, i) => (
+                          <li key={i}>
+                            {r.is_you ? "You" : r.fullname}{" "}
+                            <b>
+                              {category === "cost" ? "RM" : ""}
+                              {r.value}
+                              {category === "time" ? "s" : ""}
+                            </b>
+                          </li>
+                        ))}
+                      </ol>
+                      {!weekly[category].length && <p>Be the first!</p>}
+                    </div>
+                  ))}
+                </div>
+                <p>
+                  Class contribution: each pupil adds 10 points once this week.
+                </p>
+                <div className="class-cup">
+                  {weekly.classes.map((c) => (
+                    <span key={c.class_name}>
+                      {c.class_name}: <b>{c.points} points</b> ({c.contributors}{" "}
+                      makers)
+                    </span>
+                  ))}
+                </div>
+                <button
+                  className="secondary"
+                  disabled={
+                    weekly.challenge.level > 1 &&
+                    !progress.some(
+                      (p) => p.level_id === weekly.challenge.level - 1,
+                    )
+                  }
+                  onClick={() => openLevel(weekly.challenge.level)}
+                >
+                  Try this week&apos;s challenge <ArrowRight size={18} />
+                </button>
+              </>
+            ) : (
+              <p>{weeklyError || "Loading this week's challenge…"}</p>
+            )}
+          </section>
           <div className="mission-cards">
             {LEVELS.map((l) => {
               const p = progress.find((x) => x.level_id === l.id),
@@ -938,7 +1153,7 @@ export default function Inventra() {
                 <h2>Your parts</h2>
                 <Wrench size={20} />
               </div>
-              <p className="quiet">Drag in, or tap a part + board.</p>
+              <p className="quiet">Tap to add. Drag to move.</p>
               <div className="palette">
                 {(Object.keys(level.inventory) as PartKind[]).map((kind) => {
                   const left =
@@ -952,10 +1167,12 @@ export default function Inventra() {
                       disabled={mode !== "build" || left === 0}
                       aria-label={`Add ${PARTS[kind].label}`}
                       onClick={() => {
-                        setTool(kind);
-                        setError("");
+                        if (draggedPalette.current) {
+                          draggedPalette.current = false;
+                          return;
+                        }
+                        stagePart(kind);
                       }}
-                      onDoubleClick={() => addPart(kind)}
                     >
                       <PartIcon kind={kind} />
                       <div>
@@ -1116,9 +1333,9 @@ export default function Inventra() {
                   <Trophy size={20} />
                   <div>
                     <span>YOUR PERSONAL BEST</span>
-                    <b>{best.best_score.toLocaleString()}</b>
+                    <Stars count={best.stars} />
                     <small>
-                      RM{best.cost} · {best.time}s
+                      RM{best.cost} · {best.parts} parts · {best.time}s
                     </small>
                   </div>
                   <button
@@ -1191,23 +1408,21 @@ export default function Inventra() {
           </div>
           <DialogTitle>
             {result?.won
-              ? levelId === 3
+              ? levelId === LEVELS.length
                 ? "Motion Lab complete!"
                 : "You made it!"
               : "One more idea?"}
           </DialogTitle>
           <DialogDescription>
             {result?.won
-              ? "That’s what an inventor does."
-              : "Move a part. Change the angle. Try again."}
+              ? levelId === 10
+                ? "Two goals reached! Motion Master badge earned."
+                : "That's what an inventor does."
+              : result?.reason || "Move a part. Change the angle. Try again."}
           </DialogDescription>
           {result?.won && (
             <>
               <Stars count={result.stars} />
-              <strong className="score-number">
-                {result.score.toLocaleString()}
-                <small>BUILD SCORE</small>
-              </strong>
               <div className="result-stats">
                 <span>
                   <b>RM{result.cost}</b>Cost
@@ -1241,14 +1456,14 @@ export default function Inventra() {
             <button
               className="primary full"
               onClick={() => {
-                if (levelId < 3) openLevel(levelId + 1);
+                if (levelId < LEVELS.length) openLevel(levelId + 1);
                 else {
                   setResultOpen(false);
                   setScreen("hub");
                 }
               }}
             >
-              {levelId < 3 ? "Next challenge" : "Back to the lab"}
+              {levelId < LEVELS.length ? "Next challenge" : "Back to the lab"}
               <ArrowRight size={20} />
             </button>
           )}
