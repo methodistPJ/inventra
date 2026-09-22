@@ -56,6 +56,23 @@ function drawPart(
   c.translate(p.x, p.y);
   c.rotate((p.angle * Math.PI) / 180);
   c.globalAlpha = ghost ? 0.22 : 1;
+  if (p.kind === "wheel") {
+    c.beginPath();
+    c.arc(0, 0, 22, 0, Math.PI * 2);
+    c.fillStyle = d.color;
+    c.fill();
+    c.strokeStyle = selected ? "#203a50" : "#438899";
+    c.lineWidth = selected ? 5 : 3;
+    c.stroke();
+    c.beginPath();
+    c.moveTo(-20, 0);
+    c.lineTo(20, 0);
+    c.moveTo(0, -20);
+    c.lineTo(0, 20);
+    c.stroke();
+    c.restore();
+    return;
+  }
   if (selected) {
     c.strokeStyle = "#243d52";
     c.lineWidth = 2;
@@ -82,6 +99,21 @@ function drawPart(
     p.kind === "ramp" ? "#9c673c" : p.kind === "spring" ? "#537e34" : "#55758e";
   c.lineWidth = 2;
   c.strokeRect(-d.width / 2 + 3, -d.height / 2 + 3, d.width - 6, d.height - 6);
+  if (p.kind === "pivot") {
+    c.beginPath();
+    c.arc(0, 0, 8, 0, Math.PI * 2);
+    c.fillStyle = "#725019";
+    c.fill();
+  }
+  if (p.kind === "rough") {
+    c.beginPath();
+    for (let x = -70; x < 70; x += 12) {
+      c.moveTo(x, -9);
+      c.lineTo(x + 6, -15);
+      c.lineTo(x + 12, -9);
+    }
+    c.stroke();
+  }
   if (p.kind === "spring") {
     c.beginPath();
     for (let x = -30; x <= 30; x += 10) {
@@ -233,21 +265,60 @@ export const GameBoard = forwardRef<BoardHandle, Props>(
           c.fillRect(-b.width / 2 + 4, -b.height / 2 + 2, b.width - 8, 4);
           c.restore();
         });
-        const g = p.level.goal;
-        c.fillStyle = "#99dbaa55";
-        c.fillRect(g.x - g.width / 2, g.y - 18, g.width, 62);
-        roundRect(c, g.x - g.width / 2 - 5, g.y - 12, 10, 66, 5, "#4a966b");
-        roundRect(c, g.x + g.width / 2 - 5, g.y - 12, 10, 66, 5, "#4a966b");
-        roundRect(c, g.x - g.width / 2, g.y + 39, g.width, 12, 5, "#4a966b");
-        c.fillStyle = "#377755";
-        c.font = "bold 13px Arial";
-        c.textAlign = "center";
-        c.fillText("GOAL", g.x, g.y + 20);
-        c.textAlign = "left";
+        for (const [goalIndex, g] of [
+          p.level.goal,
+          ...(p.level.second ? [p.level.second.goal] : []),
+        ].entries()) {
+          c.fillStyle = "#99dbaa55";
+          c.fillRect(g.x - g.width / 2, g.y - 18, g.width, 62);
+          roundRect(c, g.x - g.width / 2 - 5, g.y - 12, 10, 66, 5, "#4a966b");
+          roundRect(c, g.x + g.width / 2 - 5, g.y - 12, 10, 66, 5, "#4a966b");
+          c.save();
+          c.translate(g.x, g.y + 45);
+          c.rotate(p.level.id === 7 && sim ? sim.goalBase.angle : 0);
+          roundRect(
+            c,
+            -g.width / 2,
+            -6,
+            g.width,
+            12,
+            5,
+            p.level.id === 7 ? "#efca66" : "#4a966b",
+          );
+          c.restore();
+          if (p.level.id === 7) {
+            c.fillStyle = "#725019";
+            c.beginPath();
+            c.moveTo(g.x, g.y + 45);
+            c.lineTo(g.x - 15, g.y + 70);
+            c.lineTo(g.x + 15, g.y + 70);
+            c.fill();
+          }
+          c.fillStyle = "#377755";
+          c.font = "bold 13px Arial";
+          c.textAlign = "center";
+          c.fillText(
+            goalIndex ? "BLUE" : p.level.second ? "ORANGE" : "GOAL",
+            g.x,
+            g.y + 20,
+          );
+          c.textAlign = "left";
+        }
         if (p.hint && p.mode === "build")
           p.level.solution.forEach((part) => drawPart(c, part, false, true));
-        p.parts.forEach((part) =>
-          drawPart(c, part, p.selected === part.id && p.mode === "build"),
+        p.parts.forEach((part, i) =>
+          drawPart(
+            c,
+            sim && p.mode !== "build"
+              ? {
+                  ...part,
+                  x: sim.partBodies[i].position.x,
+                  y: sim.partBodies[i].position.y,
+                  angle: (sim.partBodies[i].angle * 180) / Math.PI,
+                }
+              : part,
+            p.selected === part.id && p.mode === "build",
+          ),
         );
         if (trail.current.length > 1) {
           c.strokeStyle = "#e6976360";
@@ -260,23 +331,40 @@ export const GameBoard = forwardRef<BoardHandle, Props>(
           c.stroke();
           c.setLineDash([]);
         }
-        const pos =
-          sim && p.mode !== "build" ? sim.ball.position : p.level.spawn;
-        c.beginPath();
-        c.fillStyle = "#d1764740";
-        c.ellipse(pos.x + 3, pos.y + 14, 15, 5, 0, 0, Math.PI * 2);
-        c.fill();
-        c.beginPath();
-        c.arc(pos.x, pos.y, 15, 0, Math.PI * 2);
-        c.fillStyle = "#f08b50";
-        c.fill();
-        c.strokeStyle = "#a9552b";
-        c.lineWidth = 2;
-        c.stroke();
-        c.beginPath();
-        c.arc(pos.x - 4, pos.y - 5, 4, 0, Math.PI * 2);
-        c.fillStyle = "#ffd3aa";
-        c.fill();
+        for (const [cargoIndex, pos] of (sim && p.mode !== "build"
+          ? sim.balls.map((b) => b.position)
+          : [p.level.spawn, ...(p.level.second ? [p.level.second.spawn] : [])]
+        ).entries()) {
+          c.beginPath();
+          c.fillStyle = "#d1764740";
+          c.ellipse(pos.x + 3, pos.y + 14, 15, 5, 0, 0, Math.PI * 2);
+          c.fill();
+          c.beginPath();
+          if (p.level.cargo === "box") c.rect(pos.x - 15, pos.y - 15, 30, 30);
+          else
+            c.ellipse(
+              pos.x,
+              pos.y,
+              15,
+              p.level.cargo === "egg" ? 19 : 15,
+              0,
+              0,
+              Math.PI * 2,
+            );
+          c.fillStyle = cargoIndex
+            ? "#5daee6"
+            : p.level.cargo === "egg"
+              ? "#fff5d6"
+              : "#f08b50";
+          c.fill();
+          c.strokeStyle = "#a9552b";
+          c.lineWidth = 2;
+          c.stroke();
+          c.beginPath();
+          c.arc(pos.x - 4, pos.y - 5, 4, 0, Math.PI * 2);
+          c.fillStyle = "#ffd3aa";
+          c.fill();
+        }
         if (p.mode === "build") {
           c.fillStyle = "#486276";
           c.font = "bold 12px Arial";

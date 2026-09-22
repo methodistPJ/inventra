@@ -1210,3 +1210,208 @@
     animation: none !important;
   }
 }
+.maker-strip,
+.class-cup {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: center;
+  margin: 20px 0;
+  font-size: 16px;
+}
+.maker-strip strong {
+  color: #b2ed7c;
+}
+.maker-badge {
+  display: inline-flex;
+  gap: 7px;
+  align-items: center;
+  padding: 8px 12px;
+  border: 1px solid #88753d;
+  border-radius: 30px;
+  color: #ffd76e;
+}
+.weekly-panel {
+  border: 1px solid #42596d;
+  background: #162b3d;
+  padding: 22px;
+  border-radius: 18px;
+  margin: 24px 0 32px;
+}
+.weekly-panel h2 {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  font-size: 22px;
+}
+.weekly-panel p {
+  font-size: 14px;
+  color: #b8c9d6;
+  margin: 12px 0;
+}
+.weekly-columns {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+}
+.weekly-columns h3 {
+  font-size: 16px;
+  color: #ffd76e;
+}
+.weekly-columns ol {
+  padding-left: 20px;
+}
+.weekly-columns li {
+  font-size: 14px;
+  padding: 5px 0;
+  overflow-wrap: anywhere;
+}
+.weekly-columns b {
+  white-space: nowrap;
+  margin-left: 8px;
+}
+.class-cup {
+  font-size: 14px;
+}
+.leaderboard-tabs {
+  flex-wrap: wrap;
+  max-height: 150px;
+  overflow: auto;
+}
+.level-steps {
+  flex-wrap: wrap;
+  max-width: 430px;
+}
+.tool-button,
+.position-controls button {
+  min-width: 44px;
+  min-height: 44px;
+}
+.selection-tools .tool-heading {
+  font-size: 14px;
+}
+.result-dialog.won .result-icon {
+  animation: celebrate 0.6s ease-out;
+}
+.result-dialog.won h2 {
+  color: #b2ed7c;
+}
+@keyframes celebrate {
+  0% {
+    transform: scale(0.6) rotate(-15deg);
+  }
+  65% {
+    transform: scale(1.2) rotate(8deg);
+  }
+  100% {
+    transform: scale(1) rotate(0);
+  }
+}
+@media (max-width: 700px) {
+  .weekly-columns {
+    grid-template-columns: 1fr;
+  }
+  .weekly-panel {
+    padding: 16px;
+  }
+  .maker-strip {
+    gap: 10px;
+    font-size: 14px;
+  }
+  .workshop-heading {
+    flex-wrap: wrap;
+  }
+  .level-steps {
+    width: 100%;
+    max-width: none;
+    margin-left: 0;
+    justify-content: flex-start;
+  }
+  .level-steps button {
+    min-width: 36px;
+    min-height: 36px;
+  }
+  .parts-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px;
+  }
+  .parts-title,
+  .parts-panel > .quiet {
+    display: none;
+  }
+  .palette {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 5;
+    background: #132638;
+    border-top: 1px solid #3a5165;
+    padding: 8px max(12px, env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+    display: flex;
+    overflow-x: auto;
+    max-width: 100vw;
+    flex-wrap: nowrap;
+    order: 0;
+  }
+  .playing.lab-shell {
+    padding-bottom: calc(112px + env(safe-area-inset-bottom));
+  }
+  .part-button {
+    flex: 0 0 96px;
+    min-height: 90px;
+  }
+  .part-button b,
+  .part-button small {
+    font-size: 14px;
+  }
+  .part-button .part-count {
+    font-size: 12px;
+  }
+  .selection-tools {
+    order: 1;
+    width: 100%;
+    padding: 0;
+  }
+  .budget {
+    order: 2;
+  }
+  .personal-best {
+    order: 3;
+  }
+  .tool-row {
+    justify-content: center;
+  }
+  .tool-button {
+    min-width: 50px;
+    min-height: 48px;
+  }
+  .editor-layout {
+    gap: 10px;
+  }
+  .board-foot {
+    display: none;
+  }
+  .board-header b {
+    font-size: 14px;
+  }
+  .game-board {
+    min-height: 220px;
+    object-fit: fill;
+  }
+  .board-header {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .simulation-bar {
+    flex-wrap: wrap;
+  }
+  .sim-info {
+    font-size: 14px;
+  }
+  .board-column {
+    min-width: 0;
+  }
+}

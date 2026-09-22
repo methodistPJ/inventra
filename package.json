@@ -1,6 +1,6 @@
 {
   "name": "inventra-motion-lab",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "engines": {
     "node": ">=22.13.0"
@@ -13,7 +13,7 @@
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test tests/physics.test.ts tests/roster.test.mjs tests/database.test.mjs",
+    "test": "tsx --test tests/physics.test.ts tests/expansion.test.ts tests/roster.test.mjs tests/database.test.mjs",
     "test:e2e": "playwright test",
     "import:roster": "node --env-file-if-exists=.env.local scripts/import-roster.mjs"
   },

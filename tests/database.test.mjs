@@ -87,6 +87,72 @@ test("Supabase migration, roster transaction, RLS, progression and personal best
     6688,
   );
   await save("00000000-0000-4000-8000-000000000004", 2, 6000);
+  // Upgrade a populated v0.1 database, not just a fresh empty installation.
+  await db.exec(
+    await readFile(
+      new URL(
+        "../supabase/migrations/202609220002_motion_expansion.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  );
+  assert.equal(
+    (await db.query("select count(*)::int n from levels")).rows[0].n,
+    10,
+  );
+  assert.equal(
+    (await db.query("select best_score from player_progress where level_id=1"))
+      .rows[0].best_score,
+    6688,
+  );
+  await save("00000000-0000-4000-8000-000000000005", 1, 4000); // Old server can still save during rollout.
+  for (let level = 3; level <= 10; level++)
+    await db.query(
+      "select inventra_save_attempt($1,$2,$3,$4::jsonb,$5,$6,$7,$8,$9,$10,$11,$12)",
+      [
+        "TEST-1",
+        `00000000-0000-4000-8000-${String(level + 10).padStart(12, "0")}`,
+        level,
+        "[]",
+        true,
+        7000,
+        3,
+        50,
+        223,
+        3.717,
+        2,
+        "motion-2.0.0",
+      ],
+    );
+  const weeklyLevel = (
+    await db.query(
+      "select 1+((floor(extract(epoch from (now()-timestamptz '2026-09-20 16:00:00+00'))/604800)::int%3+3)%3) n",
+    )
+  ).rows[0].n;
+  const weeklySave = (uuid, cost, time) =>
+    db.query(
+      "select inventra_save_attempt($1,$2,$3,$4::jsonb,$5,$6,$7,$8,$9,$10,$11,$12)",
+      [
+        "TEST-1",
+        uuid,
+        weeklyLevel,
+        "[]",
+        true,
+        7000,
+        3,
+        cost,
+        223,
+        time,
+        2,
+        "motion-2.0.0",
+      ],
+    );
+  await weeklySave("00000000-0000-4000-8000-000000000030", 70, 3.5);
+  await weeklySave("00000000-0000-4000-8000-000000000031", 50, 4);
+  await weeklySave("00000000-0000-4000-8000-000000000031", 1, 1); // Retry must not rewrite metrics.
+  const weekly = (await db.query("select cost,time from weekly_records")).rows;
+  assert.deepEqual(weekly, [{ cost: 50, time: 3.5 }]);
   const rates = await Promise.all(
     [1, 2, 3].map(() =>
       db.query("select inventra_rate_limit('test',2,9999999999999) as allowed"),
@@ -98,6 +164,7 @@ test("Supabase migration, roster transaction, RLS, progression and personal best
   );
   await db.exec("set role anon");
   await assert.rejects(() => db.query("select * from students"));
+  await assert.rejects(() => db.query("select * from weekly_records"));
   await assert.rejects(() =>
     db.query("select inventra_import_roster('[]'::jsonb)"),
   );

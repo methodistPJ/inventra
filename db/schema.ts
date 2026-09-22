@@ -99,3 +99,19 @@ export const limits = sqliteTable("request_limits", {
   count: integer().notNull(),
   expires_at: integer().notNull(),
 });
+export const weeklyRecords = sqliteTable(
+  "weekly_records",
+  {
+    week: text().notNull(),
+    student_id: text()
+      .notNull()
+      .references(() => students.student_id),
+    level_id: integer()
+      .notNull()
+      .references(() => levels.id),
+    cost: integer().notNull(),
+    parts: integer().notNull(),
+    time: real().notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.week, t.student_id] })],
+);
